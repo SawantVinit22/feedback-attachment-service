@@ -29,3 +29,11 @@ module "backend_iam" {
   environment  = var.environment
   bucket_arn   = module.storage.bucket_arn
 }
+
+module "local_backend_user" {
+  source = "../../modules/local_backend_user"
+
+  project_name          = var.project_name
+  environment           = var.environment
+  backend_s3_policy_arn = module.backend_iam.policy_arn
+}

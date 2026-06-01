@@ -17,3 +17,13 @@ output "backend_s3_policy_name" {
   description = "Name of the backend S3 access IAM policy"
   value       = module.backend_iam.policy_name
 }
+
+output "local_backend_user_name" {
+  description = "Name of the local backend IAM user"
+  value       = module.local_backend_user.user_name
+}
+
+output "local_backend_user_arn" {
+  description = "ARN of the local backend IAM user"
+  value       = module.local_backend_user.user_arn
+}
