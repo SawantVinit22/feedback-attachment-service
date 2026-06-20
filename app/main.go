@@ -94,7 +94,10 @@ func (s *S3PresignService) GenerateUploadURL(
 		ObjectKey:        objectKey,
 		ExpiresInSeconds: int64(presignExpiry.Seconds()),
 		RequiredHeaders: map[string]string{
-			"Content-Type": req.ContentType,
+			"Content-Type":                  req.ContentType,
+			"x-amz-meta-feedback-id":        req.FeedbackID,
+			"x-amz-meta-original-file-name": req.FileName,
+			"x-amz-meta-uploaded-by":        userID,
 		},
 	}, nil
 }
