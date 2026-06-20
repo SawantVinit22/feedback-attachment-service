@@ -1,2 +1,5 @@
 sample.txt
 presign_response.json
+app
+*.exe
+*.out
