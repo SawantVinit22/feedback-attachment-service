@@ -40,7 +40,20 @@ type PresignUploadResponse struct {
 
 type S3PresignService struct {
 	bucket    string
+	client    *s3.Client
 	presigner *s3.PresignClient
+}
+
+type CompleteUploadRequest struct {
+	ObjectKey string `json:"object_key"`
+}
+
+type CompleteUploadResponse struct {
+	ObjectKey   string            `json:"object_key"`
+	Status      string            `json:"status"`
+	SizeBytes   int64             `json:"size_bytes"`
+	ContentType string            `json:"content_type"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
 func NewS3PresignService(ctx context.Context, bucket string) (*S3PresignService, error) {
@@ -57,6 +70,7 @@ func NewS3PresignService(ctx context.Context, bucket string) (*S3PresignService,
 
 	return &S3PresignService{
 		bucket:    bucket,
+		client:    s3Client,
 		presigner: s3.NewPresignClient(s3Client),
 	}, nil
 }
@@ -99,6 +113,44 @@ func (s *S3PresignService) GenerateUploadURL(
 			"x-amz-meta-original-file-name": req.FileName,
 			"x-amz-meta-uploaded-by":        userID,
 		},
+	}, nil
+}
+
+func (s *S3PresignService) CompleteUpload(
+	ctx context.Context,
+	req CompleteUploadRequest,
+	userID string,
+) (*CompleteUploadResponse, error) {
+	objectKey := strings.TrimSpace(req.ObjectKey)
+	if objectKey == "" {
+		return nil, errors.New("object_key is required")
+	}
+
+	expectedPrefix := fmt.Sprintf("feedback/")
+	if !strings.HasPrefix(objectKey, expectedPrefix) {
+		return nil, errors.New("invalid object_key")
+	}
+
+	headOutput, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(objectKey),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("verify uploaded object: %w", err)
+	}
+
+	metadata := headOutput.Metadata
+
+	if metadata["uploaded-by"] != userID {
+		return nil, errors.New("uploaded object does not belong to current user")
+	}
+
+	return &CompleteUploadResponse{
+		ObjectKey:   objectKey,
+		Status:      "uploaded",
+		SizeBytes:   *headOutput.ContentLength,
+		ContentType: aws.ToString(headOutput.ContentType),
+		Metadata:    metadata,
 	}, nil
 }
 
@@ -206,6 +258,39 @@ func presignUploadHandler(service *S3PresignService) http.HandlerFunc {
 	}
 }
 
+func completeUploadHandler(service *S3PresignService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+				"error": "method not allowed",
+			})
+			return
+		}
+
+		var req CompleteUploadRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid json request body",
+			})
+			return
+		}
+
+		// Temporary hardcoded user.
+		// Later this will come from JWT/Cognito authentication middleware.
+		userID := "user_123"
+
+		resp, err := service.CompleteUpload(r.Context(), req, userID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
@@ -225,6 +310,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/attachments/presign-upload", presignUploadHandler(service))
+	mux.HandleFunc("/attachments/complete-upload", completeUploadHandler(service))
 
 	addr := ":8080"
 	log.Printf("server started on %s", addr)
