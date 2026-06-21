@@ -1,0 +1,24 @@
+.git
+.gitignore
+
+# Terraform local/state files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+
+# Local generated app files
+app/app
+app/*.exe
+app/*.out
+app/sample.txt
+app/presign_response.json
+app/download_response.json
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
