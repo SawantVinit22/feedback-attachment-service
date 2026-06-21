@@ -45,7 +45,8 @@ type S3PresignService struct {
 }
 
 type CompleteUploadRequest struct {
-	ObjectKey string `json:"object_key"`
+	ObjectKey  string `json:"object_key"`
+	FeedbackID string `json:"feedback_id"`
 }
 
 type CompleteUploadResponse struct {
@@ -126,9 +127,14 @@ func (s *S3PresignService) CompleteUpload(
 		return nil, errors.New("object_key is required")
 	}
 
-	expectedPrefix := fmt.Sprintf("feedback/")
+	feedbackID := strings.TrimSpace(req.FeedbackID)
+	if feedbackID == "" {
+		return nil, errors.New("feedback_id is required")
+	}
+
+	expectedPrefix := fmt.Sprintf("feedback/%s/users/%s/", feedbackID, userID)
 	if !strings.HasPrefix(objectKey, expectedPrefix) {
-		return nil, errors.New("invalid object_key")
+		return nil, errors.New("object_key does not belong ṭo this feeback/user")
 	}
 
 	headOutput, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
@@ -143,6 +149,10 @@ func (s *S3PresignService) CompleteUpload(
 
 	if metadata["uploaded-by"] != userID {
 		return nil, errors.New("uploaded object does not belong to current user")
+	}
+
+	if metadata["feedback-id"] != feedbackID {
+		return nil, errors.New("uploaded object does not belong to this feedback")
 	}
 
 	return &CompleteUploadResponse{
