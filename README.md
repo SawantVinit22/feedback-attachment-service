@@ -45,9 +45,9 @@ app/
 ## Required Environment Variables
 
 ```bash
-AWS_PROFILE=feedback-backend-dev
+AWS_PROFILE=your-aws-profile
 AWS_REGION=us-west-2
-S3_BUCKET_NAME=vinit-presigned-url-service-dev-attachments-20260531
+S3_BUCKET_NAME=your-s3-bucket-name
 ```
 
 Optional:
@@ -61,9 +61,9 @@ SERVER_ADDR=:8080
 ```bash
 cd app
 
-AWS_PROFILE=feedback-backend-dev \
+AWS_PROFILE=your-aws-profile \
 AWS_REGION=us-west-2 \
-S3_BUCKET_NAME=vinit-presigned-url-service-dev-attachments-20260531 \
+S3_BUCKET_NAME=your-s3-bucket-name \
 go run ./cmd/server
 ```
 
