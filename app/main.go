@@ -57,6 +57,19 @@ type CompleteUploadResponse struct {
 	Metadata    map[string]string `json:"metadata"`
 }
 
+type PresignDownloadRequest struct {
+	FeedbackID string `json:"feedback_id"`
+	ObjectKey  string `json:"object_key"`
+}
+
+type PresignDownloadResponse struct {
+	DownloadURL      string `json:"download_url"`
+	ObjectKey        string `json:"object_key"`
+	ExpiresInSeconds int64  `json:"expires_in_seconds"`
+	SizeBytes        int64  `json:"size_bytes"`
+	ContentType      string `json:"content_type"`
+}
+
 func NewS3PresignService(ctx context.Context, bucket string) (*S3PresignService, error) {
 	if strings.TrimSpace(bucket) == "" {
 		return nil, errors.New("S3_BUCKET_NAME is required")
@@ -117,24 +130,25 @@ func (s *S3PresignService) GenerateUploadURL(
 	}, nil
 }
 
-func (s *S3PresignService) CompleteUpload(
+func (s *S3PresignService) verifyObjectOwnership(
 	ctx context.Context,
-	req CompleteUploadRequest,
+	feedbackID string,
+	objectKey string,
 	userID string,
-) (*CompleteUploadResponse, error) {
-	objectKey := strings.TrimSpace(req.ObjectKey)
-	if objectKey == "" {
-		return nil, errors.New("object_key is required")
-	}
-
-	feedbackID := strings.TrimSpace(req.FeedbackID)
+) (*s3.HeadObjectOutput, error) {
+	feedbackID = strings.TrimSpace(feedbackID)
 	if feedbackID == "" {
 		return nil, errors.New("feedback_id is required")
 	}
 
+	objectKey = strings.TrimSpace(objectKey)
+	if objectKey == "" {
+		return nil, errors.New("object_key is required")
+	}
+
 	expectedPrefix := fmt.Sprintf("feedback/%s/users/%s/", feedbackID, userID)
 	if !strings.HasPrefix(objectKey, expectedPrefix) {
-		return nil, errors.New("object_key does not belong ṭo this feeback/user")
+		return nil, errors.New("object_key does not belong to this feedback/user")
 	}
 
 	headOutput, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
@@ -142,7 +156,7 @@ func (s *S3PresignService) CompleteUpload(
 		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("verify uploaded object: %w", err)
+		return nil, fmt.Errorf("verify object: %w", err)
 	}
 
 	metadata := headOutput.Metadata
@@ -155,12 +169,58 @@ func (s *S3PresignService) CompleteUpload(
 		return nil, errors.New("uploaded object does not belong to this feedback")
 	}
 
+	return headOutput, nil
+}
+
+func (s *S3PresignService) CompleteUpload(
+	ctx context.Context,
+	req CompleteUploadRequest,
+	userID string,
+) (*CompleteUploadResponse, error) {
+	objectKey := strings.TrimSpace(req.ObjectKey)
+
+	headOutput, err := s.verifyObjectOwnership(ctx, req.FeedbackID, objectKey, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &CompleteUploadResponse{
 		ObjectKey:   objectKey,
 		Status:      "uploaded",
 		SizeBytes:   *headOutput.ContentLength,
 		ContentType: aws.ToString(headOutput.ContentType),
-		Metadata:    metadata,
+		Metadata:    headOutput.Metadata,
+	}, nil
+}
+
+func (s *S3PresignService) GenerateDownloadURL(
+	ctx context.Context,
+	req PresignDownloadRequest,
+	userID string,
+) (*PresignDownloadResponse, error) {
+	objectKey := strings.TrimSpace(req.ObjectKey)
+
+	headOutput, err := s.verifyObjectOwnership(ctx, req.FeedbackID, objectKey, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	presignedReq, err := s.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(objectKey),
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = presignExpiry
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate presigned get url: %w", err)
+	}
+
+	return &PresignDownloadResponse{
+		DownloadURL:      presignedReq.URL,
+		ObjectKey:        objectKey,
+		ExpiresInSeconds: int64(presignExpiry.Seconds()),
+		SizeBytes:        *headOutput.ContentLength,
+		ContentType:      aws.ToString(headOutput.ContentType),
 	}, nil
 }
 
@@ -301,6 +361,39 @@ func completeUploadHandler(service *S3PresignService) http.HandlerFunc {
 	}
 }
 
+func presignDownloadHandler(service *S3PresignService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+				"error": "method not allowed",
+			})
+			return
+		}
+
+		var req PresignDownloadRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid json request body",
+			})
+			return
+		}
+
+		// Temporary hardcoded user.
+		// Later this will come from JWT/Cognito authentication middleware.
+		userID := "user_123"
+
+		resp, err := service.GenerateDownloadURL(r.Context(), req, userID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
@@ -321,7 +414,7 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/attachments/presign-upload", presignUploadHandler(service))
 	mux.HandleFunc("/attachments/complete-upload", completeUploadHandler(service))
-
+	mux.HandleFunc("/attachments/presign-download", presignDownloadHandler(service))
 	addr := ":8080"
 	log.Printf("server started on %s", addr)
 
