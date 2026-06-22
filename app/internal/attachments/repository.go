@@ -65,6 +65,11 @@ type FindUploadedByObjectKeyInput struct {
 	UserID     string
 }
 
+type ListUploadedByFeedbackIDInput struct {
+	FeedbackID string
+	UserID     string
+}
+
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -273,4 +278,77 @@ func (r *Repository) FindUploadedByObjectKey(
 	}
 
 	return &attachment, nil
+}
+
+func (r *Repository) ListUploadedByFeedbackID(
+	ctx context.Context,
+	input ListUploadedByFeedbackIDInput,
+) ([]Attachment, error) {
+	const query = `
+		SELECT
+			id,
+			feedback_id,
+			user_id,
+			object_key,
+			original_file_name,
+			content_type,
+			requested_size_bytes,
+			size_bytes,
+			status,
+			created_at,
+			uploaded_at,
+			deleted_at,
+			updated_at
+		FROM feedback_attachments
+		WHERE
+			feedback_id = $1
+			AND user_id = $2
+			AND status = $3
+		ORDER BY uploaded_at DESC, created_at DESC
+	`
+
+	rows, err := r.db.Query(
+		ctx,
+		query,
+		input.FeedbackID,
+		input.UserID,
+		AttachmentStatusUploaded,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list uploaded attachments by feedback id: %w", err)
+	}
+	defer rows.Close()
+
+	attachments := make([]Attachment, 0)
+
+	for rows.Next() {
+		var attachment Attachment
+
+		err := rows.Scan(
+			&attachment.ID,
+			&attachment.FeedbackID,
+			&attachment.UserID,
+			&attachment.ObjectKey,
+			&attachment.OriginalFileName,
+			&attachment.ContentType,
+			&attachment.RequestedSizeBytes,
+			&attachment.SizeBytes,
+			&attachment.Status,
+			&attachment.CreatedAt,
+			&attachment.UploadedAt,
+			&attachment.DeletedAt,
+			&attachment.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan uploaded attachment: %w", err)
+		}
+
+		attachments = append(attachments, attachment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate uploaded attachments: %w", err)
+	}
+
+	return attachments, nil
 }

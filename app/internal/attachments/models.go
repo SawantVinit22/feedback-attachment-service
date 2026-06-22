@@ -42,3 +42,14 @@ type PresignDownloadResponse struct {
 	SizeBytes        int64  `json:"size_bytes"`
 	ContentType      string `json:"content_type"`
 }
+
+type AttachmentListItem struct {
+	AttachmentID     string `json:"attachment_id"`
+	FeedbackID       string `json:"feedback_id"`
+	ObjectKey        string `json:"object_key"`
+	OriginalFileName string `json:"original_file_name"`
+	ContentType      string `json:"content_type"`
+	SizeBytes        int64  `json:"size_bytes"`
+	Status           string `json:"status"`
+	UploadedAt       string `json:"uploaded_at,omitempty"`
+}

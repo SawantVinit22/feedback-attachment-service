@@ -190,6 +190,52 @@ func (s *S3PresignService) GenerateDownloadURL(
 	}, nil
 }
 
+func (s *S3PresignService) ListUploadedAttachments(
+	ctx context.Context,
+	feedbackID string,
+	userID string,
+) ([]AttachmentListItem, error) {
+	feedbackID = strings.TrimSpace(feedbackID)
+	if feedbackID == "" {
+		return nil, errors.New("feedback_id is required")
+	}
+
+	attachments, err := s.repository.ListUploadedByFeedbackID(ctx, ListUploadedByFeedbackIDInput{
+		FeedbackID: feedbackID,
+		UserID:     userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list uploaded attachments: %w", err)
+	}
+
+	items := make([]AttachmentListItem, 0, len(attachments))
+
+	for _, attachment := range attachments {
+		var sizeBytes int64
+		if attachment.SizeBytes != nil {
+			sizeBytes = *attachment.SizeBytes
+		}
+
+		uploadedAt := ""
+		if attachment.UploadedAt != nil {
+			uploadedAt = attachment.UploadedAt.Format(time.RFC3339Nano)
+		}
+
+		items = append(items, AttachmentListItem{
+			AttachmentID:     attachment.ID.String(),
+			FeedbackID:       attachment.FeedbackID,
+			ObjectKey:        attachment.ObjectKey,
+			OriginalFileName: attachment.OriginalFileName,
+			ContentType:      attachment.ContentType,
+			SizeBytes:        sizeBytes,
+			Status:           string(attachment.Status),
+			UploadedAt:       uploadedAt,
+		})
+	}
+
+	return items, nil
+}
+
 func (s *S3PresignService) verifyObjectOwnership(
 	ctx context.Context,
 	feedbackID string,

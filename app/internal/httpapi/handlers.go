@@ -23,6 +23,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/attachments/presign-upload", h.presignUploadHandler)
 	mux.HandleFunc("/attachments/complete-upload", h.completeUploadHandler)
 	mux.HandleFunc("/attachments/presign-download", h.presignDownloadHandler)
+	mux.HandleFunc("/attachments", h.listAttachmentsHandler)
 }
 
 func (h *Handler) healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +115,37 @@ func (h *Handler) presignDownloadHandler(w http.ResponseWriter, r *http.Request)
 	resp, err := h.service.GenerateDownloadURL(r.Context(), req, userID)
 	if err != nil {
 		writeAttachmentError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) listAttachmentsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+			"error": "method not allowed",
+		})
+		return
+	}
+
+	feedbackID := r.URL.Query().Get("feedback_id")
+	if feedbackID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "feedback_id is required",
+		})
+		return
+	}
+
+	// Temporary hardcoded user.
+	// Later this will come from JWT/Cognito authentication middleware.
+	userID := "user_123"
+
+	resp, err := h.service.ListUploadedAttachments(r.Context(), feedbackID, userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
 		return
 	}
 
