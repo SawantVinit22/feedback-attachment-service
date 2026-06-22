@@ -128,6 +128,10 @@ func (s *S3PresignService) CompleteUpload(
 		ContentType: actualContentType,
 	})
 	if err != nil {
+		if errors.Is(err, ErrAttachmentNotPendingUpload) {
+			return nil, err
+		}
+
 		return nil, fmt.Errorf("update upload metadata: %w", err)
 	}
 
@@ -154,6 +158,10 @@ func (s *S3PresignService) GenerateDownloadURL(
 		UserID:     userID,
 	})
 	if err != nil {
+		if errors.Is(err, ErrAttachmentNotUploaded) {
+			return nil, err
+		}
+
 		return nil, fmt.Errorf("validate uploaded attachment metadata: %w", err)
 	}
 

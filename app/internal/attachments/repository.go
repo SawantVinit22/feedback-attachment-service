@@ -2,10 +2,12 @@ package attachments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,6 +18,11 @@ const (
 	AttachmentStatusUploaded      AttachmentStatus = "UPLOADED"
 	AttachmentStatusFailed        AttachmentStatus = "FAILED"
 	AttachmentStatusDeleted       AttachmentStatus = "DELETED"
+)
+
+var (
+	ErrAttachmentNotUploaded      = errors.New("attachment not found or not uploaded")
+	ErrAttachmentNotPendingUpload = errors.New("attachment not found or not pending upload")
 )
 
 type Attachment struct {
@@ -196,6 +203,10 @@ func (r *Repository) MarkUploaded(
 		&attachment.UpdatedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAttachmentNotPendingUpload
+		}
+
 		return nil, fmt.Errorf("mark attachment uploaded: %w", err)
 	}
 
@@ -254,6 +265,10 @@ func (r *Repository) FindUploadedByObjectKey(
 		&attachment.UpdatedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAttachmentNotUploaded
+		}
+
 		return nil, fmt.Errorf("find uploaded attachment by object key: %w", err)
 	}
 

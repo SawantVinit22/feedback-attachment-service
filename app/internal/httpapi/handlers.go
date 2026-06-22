@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/attachments"
@@ -83,9 +84,7 @@ func (h *Handler) completeUploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	resp, err := h.service.CompleteUpload(r.Context(), req, userID)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
+		writeAttachmentError(w, err)
 		return
 	}
 
@@ -114,11 +113,26 @@ func (h *Handler) presignDownloadHandler(w http.ResponseWriter, r *http.Request)
 
 	resp, err := h.service.GenerateDownloadURL(r.Context(), req, userID)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
+		writeAttachmentError(w, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func writeAttachmentError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, attachments.ErrAttachmentNotUploaded):
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "attachment not found or not uploaded",
+		})
+	case errors.Is(err, attachments.ErrAttachmentNotPendingUpload):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "attachment not found or not pending upload",
+		})
+	default:
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
 }
