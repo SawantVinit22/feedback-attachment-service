@@ -1,0 +1,122 @@
+package attachments
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type AttachmentStatus string
+
+const (
+	AttachmentStatusPendingUpload AttachmentStatus = "PENDING_UPLOAD"
+	AttachmentStatusUploaded      AttachmentStatus = "UPLOADED"
+	AttachmentStatusFailed        AttachmentStatus = "FAILED"
+	AttachmentStatusDeleted       AttachmentStatus = "DELETED"
+)
+
+type Attachment struct {
+	ID                 uuid.UUID
+	FeedbackID         string
+	UserID             string
+	ObjectKey          string
+	OriginalFileName   string
+	ContentType        string
+	RequestedSizeBytes int64
+	SizeBytes          *int64
+	Status             AttachmentStatus
+	CreatedAt          time.Time
+	UploadedAt         *time.Time
+	DeletedAt          *time.Time
+	UpdatedAt          time.Time
+}
+
+type CreatePendingUploadInput struct {
+	ID                 uuid.UUID
+	FeedbackID         string
+	UserID             string
+	ObjectKey          string
+	OriginalFileName   string
+	ContentType        string
+	RequestedSizeBytes int64
+}
+
+type Repository struct {
+	db *pgxpool.Pool
+}
+
+func NewRepository(db *pgxpool.Pool) *Repository {
+	return &Repository{
+		db: db,
+	}
+}
+
+func (r *Repository) CreatePendingUpload(
+	ctx context.Context,
+	input CreatePendingUploadInput,
+) (*Attachment, error) {
+	const query = `
+		INSERT INTO feedback_attachments (
+			id,
+			feedback_id,
+			user_id,
+			object_key,
+			original_file_name,
+			content_type,
+			requested_size_bytes,
+			status
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING
+			id,
+			feedback_id,
+			user_id,
+			object_key,
+			original_file_name,
+			content_type,
+			requested_size_bytes,
+			size_bytes,
+			status,
+			created_at,
+			uploaded_at,
+			deleted_at,
+			updated_at
+	`
+
+	var attachment Attachment
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		input.ID,
+		input.FeedbackID,
+		input.UserID,
+		input.ObjectKey,
+		input.OriginalFileName,
+		input.ContentType,
+		input.RequestedSizeBytes,
+		AttachmentStatusPendingUpload,
+	).Scan(
+		&attachment.ID,
+		&attachment.FeedbackID,
+		&attachment.UserID,
+		&attachment.ObjectKey,
+		&attachment.OriginalFileName,
+		&attachment.ContentType,
+		&attachment.RequestedSizeBytes,
+		&attachment.SizeBytes,
+		&attachment.Status,
+		&attachment.CreatedAt,
+		&attachment.UploadedAt,
+		&attachment.DeletedAt,
+		&attachment.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create pending upload attachment: %w", err)
+	}
+
+	return &attachment, nil
+}
