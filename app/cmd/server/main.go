@@ -7,6 +7,7 @@ import (
 
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/attachments"
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/config"
+	"github.com/SawantVinit22/feedback-attachment-service/app/internal/database"
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/httpapi"
 )
 
@@ -17,6 +18,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	dbPool, err := database.NewPostgresPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("failed to connect to postgres: %v", err)
+	}
+	defer dbPool.Close()
+
+	log.Println("connected to postgres")
 
 	service, err := attachments.NewS3PresignService(ctx, cfg.S3BucketName)
 	if err != nil {
