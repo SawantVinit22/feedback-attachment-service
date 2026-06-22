@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/attachments"
+	"github.com/SawantVinit22/feedback-attachment-service/app/internal/auth"
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/config"
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/database"
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/httpapi"
@@ -39,9 +40,21 @@ func main() {
 	handler := httpapi.NewHandler(service)
 	handler.RegisterRoutes(mux)
 
+	authMiddleware, err := auth.NewMiddleware(
+		ctx,
+		cfg.OIDCIssuerURL,
+		cfg.OIDCClientID,
+		cfg.OIDCUserClaim,
+	)
+	if err != nil {
+		log.Fatalf("failed to create auth middleware: %v", err)
+	}
+
+	securedHandler := authMiddleware.RequireAuth(mux)
+
 	log.Printf("server started on %s", cfg.ServerAddr)
 
-	if err := http.ListenAndServe(cfg.ServerAddr, mux); err != nil {
+	if err := http.ListenAndServe(cfg.ServerAddr, securedHandler); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }

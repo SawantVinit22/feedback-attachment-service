@@ -7,9 +7,12 @@ import (
 )
 
 type Config struct {
-	S3BucketName string
-	ServerAddr   string
-	DatabaseURL  string
+	S3BucketName  string
+	ServerAddr    string
+	DatabaseURL   string
+	OIDCIssuerURL string
+	OIDCClientID  string
+	OIDCUserClaim string
 }
 
 func Load() (*Config, error) {
@@ -23,14 +26,32 @@ func Load() (*Config, error) {
 		return nil, errors.New("DATABASE_URL is required")
 	}
 
+	oidcIssuerURL := strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL"))
+	if oidcIssuerURL == "" {
+		return nil, errors.New("OIDC_ISSUER_URL is required")
+	}
+
+	oidcClientID := strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
+	if oidcClientID == "" {
+		return nil, errors.New("OIDC_CLIENT_ID is required")
+	}
+
+	oidcUserClaim := strings.TrimSpace(os.Getenv("OIDC_USER_ID_CLAIM"))
+	if oidcUserClaim == "" {
+		oidcUserClaim = "sub"
+	}
+
 	serverAddr := strings.TrimSpace(os.Getenv("SERVER_ADDR"))
 	if serverAddr == "" {
 		serverAddr = ":8080"
 	}
 
 	return &Config{
-		S3BucketName: s3BucketName,
-		ServerAddr:   serverAddr,
-		DatabaseURL:  databaseURL,
+		S3BucketName:  s3BucketName,
+		ServerAddr:    serverAddr,
+		DatabaseURL:   databaseURL,
+		OIDCIssuerURL: oidcIssuerURL,
+		OIDCClientID:  oidcClientID,
+		OIDCUserClaim: oidcUserClaim,
 	}, nil
 }

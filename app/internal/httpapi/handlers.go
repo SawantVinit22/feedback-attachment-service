@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/SawantVinit22/feedback-attachment-service/app/internal/attachments"
+	"github.com/SawantVinit22/feedback-attachment-service/app/internal/auth"
 )
 
 type Handler struct {
@@ -48,9 +49,13 @@ func (h *Handler) presignUploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Temporary hardcoded user.
-	// Later this will come from JWT/Cognito authentication middleware.
-	userID := "user_123"
+	userID, err := auth.UserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	resp, err := h.service.GenerateUploadURL(r.Context(), req, userID)
 	if err != nil {
@@ -79,9 +84,13 @@ func (h *Handler) completeUploadHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Temporary hardcoded user.
-	// Later this will come from JWT/Cognito authentication middleware.
-	userID := "user_123"
+	userID, err := auth.UserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	resp, err := h.service.CompleteUpload(r.Context(), req, userID)
 	if err != nil {
@@ -108,9 +117,13 @@ func (h *Handler) presignDownloadHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Temporary hardcoded user.
-	// Later this will come from JWT/Cognito authentication middleware.
-	userID := "user_123"
+	userID, err := auth.UserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	resp, err := h.service.GenerateDownloadURL(r.Context(), req, userID)
 	if err != nil {
@@ -137,9 +150,13 @@ func (h *Handler) listAttachmentsHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Temporary hardcoded user.
-	// Later this will come from JWT/Cognito authentication middleware.
-	userID := "user_123"
+	userID, err := auth.UserIDFromContext(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	resp, err := h.service.ListUploadedAttachments(r.Context(), feedbackID, userID)
 	if err != nil {
