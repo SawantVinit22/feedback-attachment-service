@@ -117,12 +117,27 @@ func (s *S3PresignService) CompleteUpload(
 		return nil, err
 	}
 
-	return &CompleteUploadResponse{
+	actualSizeBytes := aws.ToInt64(headOutput.ContentLength)
+	actualContentType := aws.ToString(headOutput.ContentType)
+
+	attachment, err := s.repository.MarkUploaded(ctx, MarkUploadedInput{
 		ObjectKey:   objectKey,
-		Status:      "uploaded",
-		SizeBytes:   aws.ToInt64(headOutput.ContentLength),
-		ContentType: aws.ToString(headOutput.ContentType),
-		Metadata:    headOutput.Metadata,
+		FeedbackID:  req.FeedbackID,
+		UserID:      userID,
+		SizeBytes:   actualSizeBytes,
+		ContentType: actualContentType,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("update upload metadata: %w", err)
+	}
+
+	return &CompleteUploadResponse{
+		AttachmentID: attachment.ID.String(),
+		ObjectKey:    objectKey,
+		Status:       string(attachment.Status),
+		SizeBytes:    actualSizeBytes,
+		ContentType:  actualContentType,
+		Metadata:     headOutput.Metadata,
 	}, nil
 }
 

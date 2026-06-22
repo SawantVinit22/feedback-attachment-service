@@ -21,11 +21,12 @@ type CompleteUploadRequest struct {
 }
 
 type CompleteUploadResponse struct {
-	ObjectKey   string            `json:"object_key"`
-	Status      string            `json:"status"`
-	SizeBytes   int64             `json:"size_bytes"`
-	ContentType string            `json:"content_type"`
-	Metadata    map[string]string `json:"metadata"`
+	AttachmentID string            `json:"attachment_id"`
+	ObjectKey    string            `json:"object_key"`
+	Status       string            `json:"status"`
+	SizeBytes    int64             `json:"size_bytes"`
+	ContentType  string            `json:"content_type"`
+	Metadata     map[string]string `json:"metadata"`
 }
 
 type PresignDownloadRequest struct {

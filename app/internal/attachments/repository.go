@@ -44,6 +44,14 @@ type CreatePendingUploadInput struct {
 	RequestedSizeBytes int64
 }
 
+type MarkUploadedInput struct {
+	ObjectKey   string
+	FeedbackID  string
+	UserID      string
+	SizeBytes   int64
+	ContentType string
+}
+
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -116,6 +124,73 @@ func (r *Repository) CreatePendingUpload(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create pending upload attachment: %w", err)
+	}
+
+	return &attachment, nil
+}
+
+func (r *Repository) MarkUploaded(
+	ctx context.Context,
+	input MarkUploadedInput,
+) (*Attachment, error) {
+	const query = `
+		UPDATE feedback_attachments
+		SET
+			status = $1,
+			size_bytes = $2,
+			content_type = $3,
+			uploaded_at = NOW(),
+			updated_at = NOW()
+		WHERE
+			object_key = $4
+			AND feedback_id = $5
+			AND user_id = $6
+			AND status = $7
+		RETURNING
+			id,
+			feedback_id,
+			user_id,
+			object_key,
+			original_file_name,
+			content_type,
+			requested_size_bytes,
+			size_bytes,
+			status,
+			created_at,
+			uploaded_at,
+			deleted_at,
+			updated_at
+	`
+
+	var attachment Attachment
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		AttachmentStatusUploaded,
+		input.SizeBytes,
+		input.ContentType,
+		input.ObjectKey,
+		input.FeedbackID,
+		input.UserID,
+		AttachmentStatusPendingUpload,
+	).Scan(
+		&attachment.ID,
+		&attachment.FeedbackID,
+		&attachment.UserID,
+		&attachment.ObjectKey,
+		&attachment.OriginalFileName,
+		&attachment.ContentType,
+		&attachment.RequestedSizeBytes,
+		&attachment.SizeBytes,
+		&attachment.Status,
+		&attachment.CreatedAt,
+		&attachment.UploadedAt,
+		&attachment.DeletedAt,
+		&attachment.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("mark attachment uploaded: %w", err)
 	}
 
 	return &attachment, nil
