@@ -586,3 +586,154 @@ DELETED
 5. Add CI/CD pipeline
 6. Add production deployment infrastructure
 7. Move from local PostgreSQL to managed PostgreSQL for deployed environments
+
+## Local OIDC Setup with Keycloak
+
+This project can be tested locally with Keycloak as an open-source OIDC provider.
+
+Keycloak runs through Docker Compose on port `8081`.
+
+### 1. Start Keycloak
+
+```bash
+docker compose up -d keycloak
+```
+
+Open Keycloak:
+
+```text
+http://localhost:8081
+```
+
+Login with the local admin credentials:
+
+```text
+username: admin
+password: admin
+```
+
+### 2. Create Realm
+
+Create a realm named:
+
+```text
+feedback
+```
+
+### 3. Create OIDC Client
+
+Inside the `feedback` realm, create a client:
+
+```text
+Client type: OpenID Connect
+Client ID: feedback-attachment-service
+```
+
+Client capability configuration:
+
+```text
+Client authentication: Off
+Standard flow: On
+Direct access grants: On
+```
+
+### 4. Create Test User
+
+Create a user:
+
+```text
+Username: user_123
+Email: user_123@example.com
+First name: Test
+Last name: User
+Email verified: On
+Enabled: On
+```
+
+Set the password:
+
+```text
+Password: user_123
+Temporary: Off
+```
+
+Make sure `Required user actions` is empty.
+
+### 5. Configure Backend OIDC Environment
+
+Add these values to the local `.env` file:
+
+```env
+OIDC_ISSUER_URL=http://localhost:8081/realms/feedback
+OIDC_CLIENT_ID=feedback-attachment-service
+OIDC_USER_ID_CLAIM=preferred_username
+```
+
+Using `preferred_username` makes the backend use `user_123` as the authenticated user ID.
+
+### 6. Get an ID Token
+
+```bash
+TOKEN=$(curl -s -X POST "http://localhost:8081/realms/feedback/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=feedback-attachment-service" \
+  -d "username=user_123" \
+  -d "password=user_123" \
+  -d "grant_type=password" \
+  -d "scope=openid profile email" | jq -r '.id_token')
+```
+
+Verify that a token was returned:
+
+```bash
+echo "$TOKEN" | cut -c1-80
+```
+
+Expected output starts with:
+
+```text
+eyJ...
+```
+
+### 7. Test Protected API
+
+Without token:
+
+```bash
+curl -s "http://localhost:8080/attachments?feedback_id=fb_complete_001" | jq
+```
+
+Expected response:
+
+```json
+{
+  "error": "authorization header is required"
+}
+```
+
+With token:
+
+```bash
+curl -s "http://localhost:8080/attachments?feedback_id=fb_complete_001" \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+Expected response:
+
+```json
+[
+  {
+    "attachment_id": "...",
+    "feedback_id": "fb_complete_001",
+    "object_key": "...",
+    "original_file_name": "complete-db-test.txt",
+    "content_type": "text/plain",
+    "size_bytes": 31,
+    "status": "UPLOADED",
+    "uploaded_at": "..."
+  }
+]
+```
+
+Only `/health` is public. All attachment APIs require a valid OIDC bearer token.
+
