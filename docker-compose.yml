@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: feedback-attachment-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: feedback_attachments
+      POSTGRES_USER: feedback_app
+      POSTGRES_PASSWORD: feedback_app_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - feedback_attachment_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feedback_app -d feedback_attachments"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  feedback_attachment_postgres_data:
