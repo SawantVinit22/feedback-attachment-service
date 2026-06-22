@@ -52,6 +52,12 @@ type MarkUploadedInput struct {
 	ContentType string
 }
 
+type FindUploadedByObjectKeyInput struct {
+	ObjectKey  string
+	FeedbackID string
+	UserID     string
+}
+
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -191,6 +197,64 @@ func (r *Repository) MarkUploaded(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("mark attachment uploaded: %w", err)
+	}
+
+	return &attachment, nil
+}
+
+func (r *Repository) FindUploadedByObjectKey(
+	ctx context.Context,
+	input FindUploadedByObjectKeyInput,
+) (*Attachment, error) {
+	const query = `
+		SELECT
+			id,
+			feedback_id,
+			user_id,
+			object_key,
+			original_file_name,
+			content_type,
+			requested_size_bytes,
+			size_bytes,
+			status,
+			created_at,
+			uploaded_at,
+			deleted_at,
+			updated_at
+		FROM feedback_attachments
+		WHERE
+			object_key = $1
+			AND feedback_id = $2
+			AND user_id = $3
+			AND status = $4
+	`
+
+	var attachment Attachment
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		input.ObjectKey,
+		input.FeedbackID,
+		input.UserID,
+		AttachmentStatusUploaded,
+	).Scan(
+		&attachment.ID,
+		&attachment.FeedbackID,
+		&attachment.UserID,
+		&attachment.ObjectKey,
+		&attachment.OriginalFileName,
+		&attachment.ContentType,
+		&attachment.RequestedSizeBytes,
+		&attachment.SizeBytes,
+		&attachment.Status,
+		&attachment.CreatedAt,
+		&attachment.UploadedAt,
+		&attachment.DeletedAt,
+		&attachment.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find uploaded attachment by object key: %w", err)
 	}
 
 	return &attachment, nil

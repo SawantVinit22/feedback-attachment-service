@@ -35,6 +35,7 @@ type PresignDownloadRequest struct {
 }
 
 type PresignDownloadResponse struct {
+	AttachmentID     string `json:"attachment_id"`
 	DownloadURL      string `json:"download_url"`
 	ObjectKey        string `json:"object_key"`
 	ExpiresInSeconds int64  `json:"expires_in_seconds"`

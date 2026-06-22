@@ -148,6 +148,15 @@ func (s *S3PresignService) GenerateDownloadURL(
 ) (*PresignDownloadResponse, error) {
 	objectKey := strings.TrimSpace(req.ObjectKey)
 
+	attachment, err := s.repository.FindUploadedByObjectKey(ctx, FindUploadedByObjectKeyInput{
+		ObjectKey:  objectKey,
+		FeedbackID: req.FeedbackID,
+		UserID:     userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("validate uploaded attachment metadata: %w", err)
+	}
+
 	headOutput, err := s.verifyObjectOwnership(ctx, req.FeedbackID, objectKey, userID)
 	if err != nil {
 		return nil, err
@@ -160,10 +169,11 @@ func (s *S3PresignService) GenerateDownloadURL(
 		opts.Expires = presignExpiry
 	})
 	if err != nil {
-		return nil, fmt.Errorf("generate presigned get url: %w", err)
+		return nil, fmt.Errorf("generate download presigned url: %w", err)
 	}
 
 	return &PresignDownloadResponse{
+		AttachmentID:     attachment.ID.String(),
 		DownloadURL:      presignedReq.URL,
 		ObjectKey:        objectKey,
 		ExpiresInSeconds: int64(presignExpiry.Seconds()),
