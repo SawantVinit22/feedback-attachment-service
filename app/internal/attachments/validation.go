@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 const maxUploadSizeBytes = 10 * 1024 * 1024 // 10 MB
@@ -51,14 +49,12 @@ func isAllowedContentType(contentType string) bool {
 	return allowed[strings.ToLower(contentType)]
 }
 
-func buildObjectKey(feedbackID, userID, fileName string) string {
+func buildObjectKey(feedbackID, attachmentID, fileName string) string {
 	cleanFileName := sanitizeFileName(fileName)
-	attachmentID := uuid.NewString()
 
 	return fmt.Sprintf(
-		"feedback/%s/users/%s/%s-%s",
+		"feedback/%s/attachments/%s/%s",
 		feedbackID,
-		userID,
 		attachmentID,
 		cleanFileName,
 	)

@@ -8,6 +8,7 @@ type PresignUploadRequest struct {
 }
 
 type PresignUploadResponse struct {
+	AttachmentID     string            `json:"attachment_id"`
 	UploadURL        string            `json:"upload_url"`
 	ObjectKey        string            `json:"object_key"`
 	ExpiresInSeconds int64             `json:"expires_in_seconds"`

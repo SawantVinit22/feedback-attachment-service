@@ -10,19 +10,29 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 )
 
 const presignExpiry = 10 * time.Minute
 
 type S3PresignService struct {
-	bucket    string
-	client    *s3.Client
-	presigner *s3.PresignClient
+	bucket     string
+	client     *s3.Client
+	presigner  *s3.PresignClient
+	repository *Repository
 }
 
-func NewS3PresignService(ctx context.Context, bucket string) (*S3PresignService, error) {
+func NewS3PresignService(
+	ctx context.Context,
+	bucket string,
+	repository *Repository,
+) (*S3PresignService, error) {
 	if strings.TrimSpace(bucket) == "" {
 		return nil, errors.New("S3_BUCKET_NAME is required")
+	}
+
+	if repository == nil {
+		return nil, errors.New("attachment repository is required")
 	}
 
 	awsCfg, err := config.LoadDefaultConfig(ctx)
@@ -33,9 +43,10 @@ func NewS3PresignService(ctx context.Context, bucket string) (*S3PresignService,
 	s3Client := s3.NewFromConfig(awsCfg)
 
 	return &S3PresignService{
-		bucket:    bucket,
-		client:    s3Client,
-		presigner: s3.NewPresignClient(s3Client),
+		bucket:     bucket,
+		client:     s3Client,
+		presigner:  s3.NewPresignClient(s3Client),
+		repository: repository,
 	}, nil
 }
 
@@ -48,7 +59,21 @@ func (s *S3PresignService) GenerateUploadURL(
 		return nil, err
 	}
 
-	objectKey := buildObjectKey(req.FeedbackID, userID, req.FileName)
+	attachmentID := uuid.New()
+	objectKey := buildObjectKey(req.FeedbackID, attachmentID.String(), req.FileName)
+
+	_, err := s.repository.CreatePendingUpload(ctx, CreatePendingUploadInput{
+		ID:                 attachmentID,
+		FeedbackID:         req.FeedbackID,
+		UserID:             userID,
+		ObjectKey:          objectKey,
+		OriginalFileName:   req.FileName,
+		ContentType:        req.ContentType,
+		RequestedSizeBytes: req.SizeBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create pending upload record: %w", err)
+	}
 
 	presignedReq, err := s.presigner.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
@@ -67,6 +92,7 @@ func (s *S3PresignService) GenerateUploadURL(
 	}
 
 	return &PresignUploadResponse{
+		AttachmentID:     attachmentID.String(),
 		UploadURL:        presignedReq.URL,
 		ObjectKey:        objectKey,
 		ExpiresInSeconds: int64(presignExpiry.Seconds()),
@@ -147,8 +173,11 @@ func (s *S3PresignService) verifyObjectOwnership(
 		return nil, errors.New("object_key is required")
 	}
 
-	expectedPrefix := fmt.Sprintf("feedback/%s/users/%s/", feedbackID, userID)
-	if !strings.HasPrefix(objectKey, expectedPrefix) {
+	legacyUserPrefix := fmt.Sprintf("feedback/%s/users/%s/", feedbackID, userID)
+	attachmentPrefix := fmt.Sprintf("feedback/%s/attachments/", feedbackID)
+
+	if !strings.HasPrefix(objectKey, legacyUserPrefix) &&
+		!strings.HasPrefix(objectKey, attachmentPrefix) {
 		return nil, errors.New("object_key does not belong to this feedback/user")
 	}
 

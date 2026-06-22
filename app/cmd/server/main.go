@@ -27,7 +27,9 @@ func main() {
 
 	log.Println("connected to postgres")
 
-	service, err := attachments.NewS3PresignService(ctx, cfg.S3BucketName)
+	attachmentRepository := attachments.NewRepository(dbPool)
+
+	service, err := attachments.NewS3PresignService(ctx, cfg.S3BucketName, attachmentRepository)
 	if err != nil {
 		log.Fatalf("failed to create s3 presign service: %v", err)
 	}
